@@ -77,11 +77,26 @@ Deno.serve(async (req) => {
     body = {};
   }
 
-  const { data: employee } = await admin
+  let employee: Database["public"]["Tables"]["employees"] | null = null;
+
+  // Primero intenta ligar por user_id (flujo normal con sesión auth)
+  let { data: empById } = await admin
     .from("employees")
     .select("id, code, full_name, photo_url, site_id, status, user_id")
     .eq("user_id", userData.user.id)
     .maybeSingle();
+
+  if (empById) {
+    employee = empById;
+  } else {
+    // Fallback: busca por correo electrónico (útil en demo/seed sin user_id ligado)
+    const { data: empByEmail } = await admin
+      .from("employees")
+      .select("id, code, full_name, photo_url, site_id, status, user_id, email")
+      .eq("email", userData.user.email ?? "")
+      .maybeSingle();
+    employee = empByEmail as any;
+  }
 
   if (!employee) return json({ ok: false, message: "Tu usuario no está vinculado a un empleado. Contacta a RR.HH." });
   if (employee.status !== "activo") return json({ ok: false, message: "Tu registro de empleado no está activo." });
