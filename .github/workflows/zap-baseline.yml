@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Baseline contra producción
-        uses: zaproxy/action-baseline@v0.14.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: "https://comedor-digital.netlify.app"
           cmd_options: "-a"
@@ -24,7 +24,7 @@ jobs:
 
       - name: Publicar reporte
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zap-baseline-report
           path: |
