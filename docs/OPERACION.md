@@ -298,7 +298,7 @@ Revisar a diario:
 - **Reportes:** conciliación de cocina y excepciones.
 - **Netlify:** estado del deploy y logs de funciones.
 - **Supabase:** salud del proyecto, uso de base de datos, errores de Edge Functions y resultado de `cron.job_run_details`.
-- **GitHub Actions:** CI, CodeQL y ZAP baseline semanal.
+- **GitHub Actions:** CI, CodeQL (SARIF como artefacto) y ZAP baseline semanal.
 - **Dependabot:** revisar y fusionar actualizaciones de dependencias con CI verde.
 
 Alertas recomendadas:
@@ -378,7 +378,7 @@ Revisar también:
 - `cron.job_run_details` del job de retención.
 - Advisors de seguridad y rendimiento en Supabase.
 - Resultado del ZAP baseline semanal (artefacto en GitHub Actions).
-- Alertas de CodeQL en la pestaña **Security** del repositorio.
+- Alertas de CodeQL en la pestaña **Security** del repositorio (requiere GitHub Advanced Security; mientras tanto, descargar el artefacto `codeql-sarif`).
 
 ## 14. Solución de problemas
 

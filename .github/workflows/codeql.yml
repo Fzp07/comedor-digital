@@ -22,11 +22,10 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      security-events: write
       actions: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Inicializar CodeQL
         uses: github/codeql-action/init@v4
@@ -34,7 +33,21 @@ jobs:
           languages: javascript-typescript
           queries: security-extended
 
+      # El repo es privado y el plan actual no incluye GitHub Advanced Security.
+      # El análisis se conserva como artefacto SARIF; al habilitar GHAS,
+      # cambiar `upload: never` por `upload: always` y restaurar
+      # `security-events: write` para publicar en la pestaña Security.
       - name: Analizar
         uses: github/codeql-action/analyze@v4
         with:
-          category: "/language:javascript-typescript"
+          output: ${{ runner.temp }}/codeql-results
+          upload: never
+
+      - name: Publicar SARIF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif
+          path: ${{ runner.temp }}/codeql-results
+          if-no-files-found: warn
+          retention-days: 30

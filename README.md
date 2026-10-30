@@ -177,8 +177,9 @@ Migraciones aplicadas en el proyecto `urkwubgdifcesfozdbbe`:
 17. `017_privileges_mfa_flag` — mínimo privilegio, `require_mfa` y `actor_role` en auditoría.
 18. `018_mfa_rls_enforcement` — `mfa_ok()` y AAL2 obligatorio en políticas sensibles.
 19. `019_mfa_settings_profiles_policies` — cierra el bypass de `company_settings` y `profiles`.
+20. `020_mfa_flag_integrity` — solo una sesión AAL2 puede marcar `mfa_enrolled`.
 
-Las migraciones `013`–`019` están versionadas en `supabase/migrations/`. El esquema base vive en el historial de Supabase (`supabase_migrations.schema_migrations`); para replicar en un entorno nuevo, parte del esquema base y aplica las migraciones pendientes con `supabase db push` o el SQL editor.
+Las migraciones `013`–`020` están versionadas en `supabase/migrations/`. El esquema base vive en el historial de Supabase (`supabase_migrations.schema_migrations`); para replicar en un entorno nuevo, parte del esquema base y aplica las migraciones pendientes con `supabase db push` o el SQL editor.
 
 Objetos relevantes:
 
@@ -257,6 +258,7 @@ Resumen; el detalle está en [docs/SEGURIDAD.md](docs/SEGURIDAD.md).
 
 - **MFA:** la imposición por política está implementada, pero ningún usuario demo tiene TOTP enrolado y `require_mfa` está en `false`.
 - **Protección de `main`:** el plan GitHub Free no permite branch protection ni rulesets en repos privados; requiere GitHub Pro y exigir el check `Lint, pruebas y build`.
+- **CodeQL/GHAS:** el análisis se ejecuta y se publica como artefacto SARIF, pero la pestaña Security requiere GitHub Advanced Security (plan de pago).
 - **Leaked password protection:** requiere activarlo en el dashboard de Supabase o con un token de Management API.
 - **Reporte programado:** la configuración se persiste, pero el envío automático por correo requiere configurar un proveedor SMTP/API en producción.
 - **WebAuthn:** el modelo y las políticas existen; el enrolamiento biométrico completo (SimpleWebAuthn) queda como siguiente iteración. El PIN y el QR cubren el MVP.

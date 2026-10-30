@@ -38,6 +38,7 @@ Controles de separación:
 - **JWT** con expiración y refresh token; el cliente usa PKCE.
 - **MFA TOTP** disponible para todas las cuentas. La política `company_settings.require_mfa` (por defecto `false`) exige AAL2 a `admin`, `rrhh`, `supervisor` y `auditor`; `/login/mfa` gestiona el reto y permite inscribir el factor si aún no existe. La columna `profiles.mfa_enrolled` registra el estado.
 - **Doble control:** además del gate de la PWA, `public.mfa_ok()` se evalúa en las políticas RLS de las tablas sensibles (migraciones `018` y `019`). Un rol privilegiado con AAL1 no puede leer empleados, auditoría, dispositivos, consumos ni modificar `company_settings`/`profiles`, aunque llame la API directamente. Su propio perfil y la lectura de `company_settings` siguen disponibles para poder mostrar el reto MFA. Operadores y empleados no se ven afectados.
+- **Integridad del flag:** `set_my_mfa_enrolled(true)` exige una sesión AAL2 (migración `020`), de modo que `profiles.mfa_enrolled` no se puede marcar sin haber verificado un factor.
 - **Sesiones y dispositivos:** tabla `sessions` y tabla `devices` para cajas del comedor. El centro de seguridad permite **cerrar las demás sesiones** con `signOut({ scope: "others" })`.
 - **Revocación de dispositivo:** `revoke_device()` marca `status = 'revocado'`; la siguiente validación falla de inmediato.
 - **Token de caja:** cadena opaca de al menos 32 caracteres; el servidor guarda solo `sha256(token)`. El token se escribe una vez en la caja y se guarda en `localStorage` del navegador autorizado.
@@ -191,7 +192,7 @@ La cámara solo se usa para escanear QR; no se sube video ni imagen a Supabase.
 | MFA obligatorio para roles privilegiados | **Implementado** con `require_mfa`, `/login/mfa` y RLS `mfa_ok()`; demo en `false` | Enrolar TOTP a las cuentas reales y activar el flag |
 | Leaked password protection | Desactivado | Activar en Supabase Auth (dashboard o token de Management API) |
 | Pentest externo | Pendiente | Contratar antes de go-live |
-| SAST/DAST | **CodeQL, ZAP baseline semanal, Dependabot y `npm audit` en CI** | Revisar reportes y ampliar cobertura |
+| SAST/DAST | **CodeQL (SARIF como artefacto), ZAP baseline semanal, Dependabot y `npm audit` en CI** | Habilitar GHAS para publicar en la pestaña Security; revisar artefactos |
 | Índices FK | **49 índices creados** (`014_fk_indexes`) | Mantener advisors sin avisos `unindexed_foreign_keys` |
 | `auth_rls_initplan` | **17 políticas corregidas** (`015_rls_initplan`) | Mantener `(select auth.uid())` en políticas nuevas |
 | Credenciales PIN | **Aisladas** en `employee_credentials` / `profile_credentials` | Rotar PINs periódicamente y al retirar personal |
@@ -203,11 +204,24 @@ La cámara solo se usa para escanear QR; no se sube video ni imagen a Supabase.
 | Backups/PITR | No en plan actual | Subir de plan y probar restauración |
 | Sesiones | Revocación de otras sesiones desde UI | Valorar listado por dispositivo y expiración explícita |
 | Protección de `main` | Bloqueada por el plan GitHub Free (repo privado) | Activar GitHub Pro y exigir `Lint, pruebas y build`, sin force-push ni borrado |
+| CodeQL en la pestaña Security | Bloqueado: GitHub Advanced Security no incluido en el plan | Subir de plan; el workflow ya genera SARIF y lo adjunta como artefacto |
 
 Notas de los advisors de Supabase tras el endurecimiento:
 
-- Seguridad: 5 INFO esperados por tablas sin políticas (`app_secrets`, `employee_credentials`, `profile_credentials`, `qr_nonces`, `rate_limits`) y 20 WARN esperados por funciones `SECURITY DEFINER` ejecutables por `authenticated` (helpers de RLS). Revisar cualquier aviso nuevo.
+- Seguridad: 5 INFO esperados por tablas sin políticas (`app_secrets`, `employee_credentials`, `profile_credentials`, `qr_nonces`, `rate_limits`) y 21 WARN esperados por funciones `SECURITY DEFINER` ejecutables por `authenticated` (helpers de RLS, incluida `mfa_ok()`), más 1 WARN de leaked password protection. Revisar cualquier aviso nuevo.
 - Rendimiento: sin `unindexed_foreign_keys` ni `auth_rls_initplan`. Quedan INFO de índices sin uso (esperable en un piloto) y WARN de múltiples políticas permisivas.
+
+### Baseline ZAP (2026-10-30)
+
+Escaneo pasivo contra producción (`zap-baseline.yml`, `fail_action: false`): **16 alertas, ninguna de riesgo alto**.
+
+| Riesgo | Hallazgo | Tratamiento |
+| --- | --- | --- |
+| Medio | `script-src 'unsafe-inline'` y `style-src 'unsafe-inline'` | Necesario para la hidratación de Next.js; `unsafe-eval` sigue fuera en producción. Migrar a nonces/hashes queda como iteración. |
+| Bajo | `Cross-Origin-Embedder-Policy` ausente | No se activa `require-corp`: bloquearía imágenes y llamadas a Supabase. Se mantiene aislamiento con CSP, COOP y CORP. |
+| Bajo | COOP/CORP ausentes | Mitigado en `next.config.ts` (`same-origin`); verificar en el próximo baseline tras desplegar. |
+| Bajo | `Permissions-Policy`/`nosniff` en chunks estáticos | Mitigado en `netlify.toml` para `/_next/static/*`; verificar tras el próximo despliegue. |
+| Informativo | `Sec-Fetch-*`, caché y Base64 | Sin impacto accionable; revisar en el próximo baseline. |
 
 ## 14. Checklist de revisión
 
