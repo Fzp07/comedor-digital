@@ -9,10 +9,18 @@
   NODE_VERSION = "22"
   NEXT_TELEMETRY_DISABLED = "1"
 
-# Los chunks estáticos los sirve el CDN de Netlify y no pasan por las cabeceras
-# de Next.js; se refuerzan aquí para que también lleven nosniff y políticas.
+# Los estáticos los sirve el CDN de Netlify y no pasan por las cabeceras de
+# Next.js; se refuerzan aquí para que también lleven nosniff y políticas.
 [[headers]]
   for = "/_next/static/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(self), microphone=(), geolocation=(self)"
+    Cross-Origin-Resource-Policy = "same-origin"
+
+[[headers]]
+  for = "/icons/*"
   [headers.values]
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
