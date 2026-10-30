@@ -11,7 +11,7 @@ Guía para administrar el piloto y para desplegar/operar la aplicación en produ
 
 - Proyecto Supabase: `urkwubgdifcesfozdbbe` (región `sa-east-1`).
 - Sitio Netlify: `comedor-digital` (`34d6ca31-d742-4cce-b42c-30b92f91b187`).
-- Repositorio GitHub: pendiente de creación (ver README).
+- Repositorio GitHub: https://github.com/Fzp07/comedor-digital (privado).
 
 > Para un go-live real se recomienda **un proyecto Supabase por entorno** (`dev`, `staging`, `prod`) y migraciones versionadas en el repositorio.
 

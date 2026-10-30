@@ -10,7 +10,7 @@ PWA móvil-first para administrar el comedor de **una sola empresa**: empleados,
 | --- | --- |
 | Aplicación (Netlify) | https://comedor-digital.netlify.app |
 | Supabase (API) | https://urkwubgdifcesfozdbbe.supabase.co |
-| Repositorio GitHub | Pendiente de creación (ver [Limitaciones](#limitaciones-conocidas)) |
+| Repositorio GitHub | [Fzp07/comedor-digital](https://github.com/Fzp07/comedor-digital) (privado) |
 
 ## Cuentas demo
 
@@ -231,7 +231,6 @@ Resumen; el detalle está en [docs/SEGURIDAD.md](docs/SEGURIDAD.md).
 
 ## Limitaciones conocidas
 
-- **GitHub:** el PAT actual puede leer repositorios, pero no crear repositorios (`403 Resource not accessible by personal access token`). El repositorio local ya está inicializado con un commit inicial; falta crear el repositorio privado `comedor-digital` y hacer push.
 - **MFA:** la UI está implementada, pero ningún usuario demo tiene un factor TOTP enrolado todavía.
 - **Reporte programado:** la configuración se persiste, pero el envío automático por correo requiere configurar `pg_cron` y un proveedor SMTP/API en producción.
 - **WebAuthn:** el modelo y las políticas existen; el enrolamiento biométrico completo (SimpleWebAuthn) queda como siguiente iteración. El PIN y el QR cubren el MVP.
