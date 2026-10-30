@@ -213,15 +213,13 @@ Notas de los advisors de Supabase tras el endurecimiento:
 
 ### Baseline ZAP (2026-10-30)
 
-Escaneo pasivo contra producción (`zap-baseline.yml`, `fail_action: false`): **16 alertas, ninguna de riesgo alto**.
+Escaneo pasivo contra producción (`zap-baseline.yml`, `fail_action: false`): **12 alertas, ninguna de riesgo alto**. La reducción desde 16 se logró con COOP/CORP en `next.config.ts` y cabeceras para `/_next/static/*` e `/icons/*` en `netlify.toml`.
 
 | Riesgo | Hallazgo | Tratamiento |
 | --- | --- | --- |
 | Medio | `script-src 'unsafe-inline'` y `style-src 'unsafe-inline'` | Necesario para la hidratación de Next.js; `unsafe-eval` sigue fuera en producción. Migrar a nonces/hashes queda como iteración. |
-| Bajo | `Cross-Origin-Embedder-Policy` ausente | No se activa `require-corp`: bloquearía imágenes y llamadas a Supabase. Se mantiene aislamiento con CSP, COOP y CORP. |
-| Bajo | COOP/CORP ausentes | Mitigado en `next.config.ts` (`same-origin`); verificar en el próximo baseline tras desplegar. |
-| Bajo | `Permissions-Policy`/`nosniff` en chunks estáticos | Mitigado en `netlify.toml` para `/_next/static/*`; verificar tras el próximo despliegue. |
-| Informativo | `Sec-Fetch-*`, caché y Base64 | Sin impacto accionable; revisar en el próximo baseline. |
+| Bajo | `Cross-Origin-Embedder-Policy` ausente | No se activa `require-corp`: bloquearía imágenes y llamadas a Supabase. Se mantiene aislamiento con CSP, COOP y CORP. Hallazgo aceptado. |
+| Informativo | `Sec-Fetch-*`, caché, Base64 y “Modern Web Application” | Sin impacto accionable; se revisan en cada baseline. |
 
 ## 14. Checklist de revisión
 
