@@ -177,8 +177,9 @@ Migraciones aplicadas en el proyecto `urkwubgdifcesfozdbbe`:
 17. `017_privileges_mfa_flag` — mínimo privilegio, `require_mfa` y `actor_role` en auditoría.
 18. `018_mfa_rls_enforcement` — `mfa_ok()` y AAL2 obligatorio en políticas sensibles.
 19. `019_mfa_settings_profiles_policies` — cierra el bypass de `company_settings` y `profiles`.
+20. `020_mfa_flag_integrity` — solo una sesión AAL2 puede marcar `mfa_enrolled`.
 
-Las migraciones `013`–`019` están versionadas en `supabase/migrations/`. El esquema base vive en el historial de Supabase (`supabase_migrations.schema_migrations`); para replicar en un entorno nuevo, parte del esquema base y aplica las migraciones pendientes con `supabase db push` o el SQL editor.
+Las migraciones `013`–`020` están versionadas en `supabase/migrations/`. El esquema base vive en el historial de Supabase (`supabase_migrations.schema_migrations`); para replicar en un entorno nuevo, parte del esquema base y aplica las migraciones pendientes con `supabase db push` o el SQL editor.
 
 Objetos relevantes:
 

@@ -38,6 +38,7 @@ Controles de separación:
 - **JWT** con expiración y refresh token; el cliente usa PKCE.
 - **MFA TOTP** disponible para todas las cuentas. La política `company_settings.require_mfa` (por defecto `false`) exige AAL2 a `admin`, `rrhh`, `supervisor` y `auditor`; `/login/mfa` gestiona el reto y permite inscribir el factor si aún no existe. La columna `profiles.mfa_enrolled` registra el estado.
 - **Doble control:** además del gate de la PWA, `public.mfa_ok()` se evalúa en las políticas RLS de las tablas sensibles (migraciones `018` y `019`). Un rol privilegiado con AAL1 no puede leer empleados, auditoría, dispositivos, consumos ni modificar `company_settings`/`profiles`, aunque llame la API directamente. Su propio perfil y la lectura de `company_settings` siguen disponibles para poder mostrar el reto MFA. Operadores y empleados no se ven afectados.
+- **Integridad del flag:** `set_my_mfa_enrolled(true)` exige una sesión AAL2 (migración `020`), de modo que `profiles.mfa_enrolled` no se puede marcar sin haber verificado un factor.
 - **Sesiones y dispositivos:** tabla `sessions` y tabla `devices` para cajas del comedor. El centro de seguridad permite **cerrar las demás sesiones** con `signOut({ scope: "others" })`.
 - **Revocación de dispositivo:** `revoke_device()` marca `status = 'revocado'`; la siguiente validación falla de inmediato.
 - **Token de caja:** cadena opaca de al menos 32 caracteres; el servidor guarda solo `sha256(token)`. El token se escribe una vez en la caja y se guarda en `localStorage` del navegador autorizado.
