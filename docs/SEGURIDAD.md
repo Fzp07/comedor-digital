@@ -191,7 +191,7 @@ La cámara solo se usa para escanear QR; no se sube video ni imagen a Supabase.
 | MFA obligatorio para roles privilegiados | **Implementado** con `require_mfa`, `/login/mfa` y RLS `mfa_ok()`; demo en `false` | Enrolar TOTP a las cuentas reales y activar el flag |
 | Leaked password protection | Desactivado | Activar en Supabase Auth (dashboard o token de Management API) |
 | Pentest externo | Pendiente | Contratar antes de go-live |
-| SAST/DAST | **CodeQL, ZAP baseline semanal, Dependabot y `npm audit` en CI** | Revisar reportes y ampliar cobertura |
+| SAST/DAST | **CodeQL (SARIF como artefacto), ZAP baseline semanal, Dependabot y `npm audit` en CI** | Habilitar GHAS para publicar en la pestaña Security; revisar artefactos |
 | Índices FK | **49 índices creados** (`014_fk_indexes`) | Mantener advisors sin avisos `unindexed_foreign_keys` |
 | `auth_rls_initplan` | **17 políticas corregidas** (`015_rls_initplan`) | Mantener `(select auth.uid())` en políticas nuevas |
 | Credenciales PIN | **Aisladas** en `employee_credentials` / `profile_credentials` | Rotar PINs periódicamente y al retirar personal |
@@ -203,6 +203,7 @@ La cámara solo se usa para escanear QR; no se sube video ni imagen a Supabase.
 | Backups/PITR | No en plan actual | Subir de plan y probar restauración |
 | Sesiones | Revocación de otras sesiones desde UI | Valorar listado por dispositivo y expiración explícita |
 | Protección de `main` | Bloqueada por el plan GitHub Free (repo privado) | Activar GitHub Pro y exigir `Lint, pruebas y build`, sin force-push ni borrado |
+| CodeQL en la pestaña Security | Bloqueado: GitHub Advanced Security no incluido en el plan | Subir de plan; el workflow ya genera SARIF y lo adjunta como artefacto |
 
 Notas de los advisors de Supabase tras el endurecimiento:
 
