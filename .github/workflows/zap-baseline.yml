@@ -15,21 +15,10 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Baseline contra producción
-        uses: zaproxy/action-baseline@v0.14.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: "https://comedor-digital.netlify.app"
           cmd_options: "-a"
           allow_issue_writing: false
           fail_action: false
-
-      - name: Publicar reporte
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: zap-baseline-report
-          path: |
-            report_html.html
-            report_md.md
-            report_json.json
-          if-no-files-found: ignore
-          retention-days: 30
+          artifact_name: zap-baseline-report
