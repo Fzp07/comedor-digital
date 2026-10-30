@@ -256,6 +256,7 @@ Resumen; el detalle está en [docs/SEGURIDAD.md](docs/SEGURIDAD.md).
 ## Limitaciones conocidas
 
 - **MFA:** la imposición por política está implementada, pero ningún usuario demo tiene TOTP enrolado y `require_mfa` está en `false`.
+- **Protección de `main`:** el plan GitHub Free no permite branch protection ni rulesets en repos privados; requiere GitHub Pro y exigir el check `Lint, pruebas y build`.
 - **Leaked password protection:** requiere activarlo en el dashboard de Supabase o con un token de Management API.
 - **Reporte programado:** la configuración se persiste, pero el envío automático por correo requiere configurar un proveedor SMTP/API en producción.
 - **WebAuthn:** el modelo y las políticas existen; el enrolamiento biométrico completo (SimpleWebAuthn) queda como siguiente iteración. El PIN y el QR cubren el MVP.

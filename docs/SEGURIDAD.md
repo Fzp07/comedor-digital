@@ -202,6 +202,7 @@ La cámara solo se usa para escanear QR; no se sube video ni imagen a Supabase.
 | Correo programado | Configuración persistida | Configurar proveedor SMTP/API + `pg_cron` |
 | Backups/PITR | No en plan actual | Subir de plan y probar restauración |
 | Sesiones | Revocación de otras sesiones desde UI | Valorar listado por dispositivo y expiración explícita |
+| Protección de `main` | Bloqueada por el plan GitHub Free (repo privado) | Activar GitHub Pro y exigir `Lint, pruebas y build`, sin force-push ni borrado |
 
 Notas de los advisors de Supabase tras el endurecimiento:
 
@@ -225,6 +226,7 @@ Notas de los advisors de Supabase tras el endurecimiento:
 - [x] Fotos en bucket privado con URLs firmadas.
 - [x] Retención operativa automatizada con `pg_cron`.
 - [x] SAST (CodeQL), DAST semanal (ZAP), Dependabot y auditoría de dependencias en CI.
+- [ ] Protección de `main` (requiere GitHub Pro en repo privado).
 - [ ] Leaked password protection activo.
 - [ ] Pentest externo.
 - [ ] PITR y prueba de restauración.

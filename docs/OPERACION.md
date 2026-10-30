@@ -10,8 +10,9 @@ Guía para administrar el piloto y para desplegar/operar la aplicación en produ
 | Producción | https://comedor-digital.netlify.app | Mismo proyecto Supabase | Demo del piloto |
 
 - Proyecto Supabase: `urkwubgdifcesfozdbbe` (región `sa-east-1`).
-- Sitio Netlify: `comedor-digital` (`34d6ca31-d742-4cce-b42c-30b92f91b187`).
+- Sitio Netlify: `comedor-digital` (`34d6ca31-d742-4cce-b42c-30b92f91b187`). El despliegue es manual desde el repo (`npx -y @netlify/mcp@latest ...`); Netlify ejecuta el build con `netlify.toml`.
 - Repositorio GitHub: https://github.com/Fzp07/comedor-digital (privado).
+- **Protección de `main`:** pendiente. El plan GitHub Free no permite branch protection ni rulesets en repos privados (HTTP 403: “Upgrade to GitHub Pro”). Al activar GitHub Pro, exigir el check **`Lint, pruebas y build`**, bloquear force-push y borrado, y mantener `main` siempre verde.
 
 > Para un go-live real se recomienda **un proyecto Supabase por entorno** (`dev`, `staging`, `prod`) y migraciones versionadas en el repositorio.
 
