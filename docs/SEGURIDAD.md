@@ -208,8 +208,20 @@ La cámara solo se usa para escanear QR; no se sube video ni imagen a Supabase.
 
 Notas de los advisors de Supabase tras el endurecimiento:
 
-- Seguridad: 5 INFO esperados por tablas sin políticas (`app_secrets`, `employee_credentials`, `profile_credentials`, `qr_nonces`, `rate_limits`) y 20 WARN esperados por funciones `SECURITY DEFINER` ejecutables por `authenticated` (helpers de RLS). Revisar cualquier aviso nuevo.
+- Seguridad: 5 INFO esperados por tablas sin políticas (`app_secrets`, `employee_credentials`, `profile_credentials`, `qr_nonces`, `rate_limits`) y 21 WARN esperados por funciones `SECURITY DEFINER` ejecutables por `authenticated` (helpers de RLS, incluida `mfa_ok()`), más 1 WARN de leaked password protection. Revisar cualquier aviso nuevo.
 - Rendimiento: sin `unindexed_foreign_keys` ni `auth_rls_initplan`. Quedan INFO de índices sin uso (esperable en un piloto) y WARN de múltiples políticas permisivas.
+
+### Baseline ZAP (2026-10-30)
+
+Escaneo pasivo contra producción (`zap-baseline.yml`, `fail_action: false`): **16 alertas, ninguna de riesgo alto**.
+
+| Riesgo | Hallazgo | Tratamiento |
+| --- | --- | --- |
+| Medio | `script-src 'unsafe-inline'` y `style-src 'unsafe-inline'` | Necesario para la hidratación de Next.js; `unsafe-eval` sigue fuera en producción. Migrar a nonces/hashes queda como iteración. |
+| Bajo | `Cross-Origin-Embedder-Policy` ausente | No se activa `require-corp`: bloquearía imágenes y llamadas a Supabase. Se mantiene aislamiento con CSP, COOP y CORP. |
+| Bajo | COOP/CORP ausentes | Mitigado en `next.config.ts` (`same-origin`); verificar en el próximo baseline tras desplegar. |
+| Bajo | `Permissions-Policy`/`nosniff` en chunks estáticos | Mitigado en `netlify.toml` para `/_next/static/*`; verificar tras el próximo despliegue. |
+| Informativo | `Sec-Fetch-*`, caché y Base64 | Sin impacto accionable; revisar en el próximo baseline. |
 
 ## 14. Checklist de revisión
 
