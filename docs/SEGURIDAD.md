@@ -36,24 +36,25 @@ Controles de separación:
 
 - **Supabase Auth** con correo/contraseña. Contraseñas gestionadas por GoTrue (bcrypt).
 - **JWT** con expiración y refresh token; el cliente usa PKCE.
-- **MFA TOTP** disponible para todas las cuentas y visible en el centro de seguridad. La columna `profiles.mfa_enrolled` registra el estado.
-- **Sesiones y dispositivos:** tabla `sessions` y tabla `devices` para cajas del comedor.
+- **MFA TOTP** disponible para todas las cuentas. La política `company_settings.require_mfa` (por defecto `false`) exige AAL2 a `admin`, `rrhh`, `supervisor` y `auditor`; `/login/mfa` gestiona el reto y permite inscribir el factor si aún no existe. La columna `profiles.mfa_enrolled` registra el estado.
+- **Doble control:** además del gate de la PWA, `public.mfa_ok()` se evalúa en las políticas RLS de las tablas sensibles (migraciones `018` y `019`). Un rol privilegiado con AAL1 no puede leer empleados, auditoría, dispositivos, consumos ni modificar `company_settings`/`profiles`, aunque llame la API directamente. Su propio perfil y la lectura de `company_settings` siguen disponibles para poder mostrar el reto MFA. Operadores y empleados no se ven afectados.
+- **Sesiones y dispositivos:** tabla `sessions` y tabla `devices` para cajas del comedor. El centro de seguridad permite **cerrar las demás sesiones** con `signOut({ scope: "others" })`.
 - **Revocación de dispositivo:** `revoke_device()` marca `status = 'revocado'`; la siguiente validación falla de inmediato.
 - **Token de caja:** cadena opaca de al menos 32 caracteres; el servidor guarda solo `sha256(token)`. El token se escribe una vez en la caja y se guarda en `localStorage` del navegador autorizado.
 
 ### Estado del piloto
 
-- Ningún usuario demo tiene TOTP enrolado todavía.
-- Antes de producción: exigir MFA a `admin` y `supervisor`, y opcionalmente a `rrhh` y `auditor`.
-- Activar **leaked password protection** en Supabase Auth (HaveIBeenPwned).
+- `require_mfa = false` para no bloquear las cuentas demo, que aún no tienen TOTP.
+- Antes de producción: enrolar TOTP a `admin`, `rrhh`, `supervisor` y `auditor`, y luego activar `require_mfa`.
+- Activar **leaked password protection** en Supabase Auth (HaveIBeenPwned); requiere el dashboard o un token de Management API.
 
 ## 4. Autorización en base de datos
 
 ### 4.1 RLS
 
-- RLS activo en **33 tablas** de `public`.
-- `FORCE ROW LEVEL SECURITY` en 31 tablas; `rate_limits` y `kitchen_reconciliations` quedan sin `FORCE` para permitir tareas internas.
-- `app_secrets`, `qr_nonces` y `rate_limits` no tienen políticas: **solo service role** puede leerlas/escribirlas.
+- RLS activo en las **35 tablas** de `public`.
+- `FORCE ROW LEVEL SECURITY` en 33 tablas; `rate_limits` y `kitchen_reconciliations` quedan sin `FORCE` para permitir tareas internas.
+- `app_secrets`, `qr_nonces`, `rate_limits`, `employee_credentials` y `profile_credentials` no tienen políticas: **solo service role** puede leerlas/escribirlas. La migración `017_privileges_mfa_flag` revocó además todos los privilegios de tabla de `public`, `anon` y `authenticated` sobre ellas.
 - Las vistas de reportes usan `security_invoker = true`, por lo que heredan las políticas del usuario que consulta.
 - Tablas append-only (`audit_log`, `security_events`, `ticket_events`, `device_events`) no tienen políticas de `UPDATE`/`DELETE`; los inserts ocurren por RPC `SECURITY DEFINER`.
 - `audit_log` tiene un trigger que bloquea cualquier `UPDATE`/`DELETE`.
@@ -84,6 +85,8 @@ qr-token            como empleado    → 200 (la Edge Function usa service role)
 
 Las RPC de negocio (`issue_ticket_batch`, `cancel_ticket`, `compensate_redemption`, `register_device`, `revoke_device`, `resolve_security_event`, `set_employee_pin`, `save_kitchen_reconciliation`, `record_consent`, `set_my_mfa_enrolled`, `get_dashboard`, `get_employee_wallet`) quedaron solo para `authenticated` + `service_role`. Cada una valida rol, sede y/o propiedad dentro de la función.
 
+`set_employee_pin` es la única vía de escritura de PIN: exige `can_manage_people()`, valida 4–6 dígitos y escribe en `employee_credentials`. `verify_employee_pin` y `verify_supervisor_pin` son exclusivas de `service_role` y solo las invocan las Edge Functions.
+
 Los helpers usados por RLS (`can_manage_people`, `can_read_site`, `can_supervise_site`, `current_app_role`, etc.) deben seguir siendo ejecutables por `authenticated`; solo devuelven booleanos y no exponen datos.
 
 ### 4.3 Triggers
@@ -111,8 +114,8 @@ payload = { v, e, s, m, n, exp, iat }
 
 ## 6. PIN y excepción de supervisor
 
-- PIN de empleado: 4–6 dígitos, hash bcrypt en `employees.pin_hash`; verificación con `crypt()` en extensión `pgcrypto`.
-- PIN de supervisor: hash bcrypt en `profiles.override_pin_hash`; solo roles `supervisor`/`admin`.
+- PIN de empleado: 4–6 dígitos, hash bcrypt en `employee_credentials.pin_hash`; verificación con `crypt()` en extensión `pgcrypto`. La tabla tiene RLS + `FORCE` y ninguna política: solo `service_role` y funciones `SECURITY DEFINER` la tocan.
+- PIN de supervisor: hash bcrypt en `profile_credentials.override_pin_hash`; solo roles `supervisor`/`admin` y verificación exclusiva por `verify_supervisor_pin` (service role).
 - Rate limit por operador + código: **8 intentos / 5 minutos** para PIN.
 - Rate limit de validación QR por operador/sede.
 - La excepción exige motivo ≥ 10 caracteres y registra `overrides` + `redemptions` con `method = manual`.
@@ -145,7 +148,7 @@ payload = { v, e, s, m, n, exp, iat }
 - `ticket_events`: transiciones de estado del tiquete.
 - `device_events`: registro/revocación de cajas.
 - `redemptions` y `overrides` son inmutables para el cliente; las correcciones se hacen con **compensación** + evento de auditoría, no borrando.
-- Retención: tabla `data_retention_policies` preparada; la purga automática requiere job programado.
+- Retención: `public.purge_operational_data()` corre a diario con `pg_cron` (08:15 UTC / 03:15 Bogotá). Elimina `qr_nonces` vencidos hace más de 7 días, `rate_limits` de más de 1 día, `sync_batches` de más de 90 días y sesiones inactivas/revocadas. **No toca `audit_log`**, que permanece inmutable.
 
 ## 10. Cabeceras y superficie web
 
@@ -156,8 +159,9 @@ payload = { v, e, s, m, n, exp, iat }
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: camera=(self), microphone=(), geolocation=(self)`
-- CSP con `default-src 'self'`, `connect-src` limitado a Supabase, `frame-ancestors 'none'`, `object-src 'none'`.
+- CSP con `default-src 'self'`, `connect-src` limitado a Supabase, `frame-ancestors 'none'`, `frame-src 'none'`, `object-src 'none'` y `worker-src 'self' blob:`. En producción **no se incluye `unsafe-eval`**; solo se habilita en desarrollo para el hot reload.
 - `poweredByHeader: false`.
+- El bucket `employee-photos` es **privado**. La PWA resuelve las rutas relativas con `createSignedUrl` (1 hora) y sube las fotos a `${employeeId}/${uuid}.${ext}`; las políticas de Storage verifican la carpeta contra el UUID del empleado y el rol.
 
 La cámara solo se usa para escanear QR; no se sube video ni imagen a Supabase.
 
@@ -177,25 +181,32 @@ La cámara solo se usa para escanear QR; no se sube video ni imagen a Supabase.
 - Supabase plan gratuito del piloto: backups automáticos limitados; **PITR no incluido**.
 - Producción: plan con PITR, backups diarios verificados y prueba de restauración trimestral.
 - Exportación de consumos y auditoría a CSV para respaldo externo.
-- `backup_runs` y `data_retention_policies` existen para gobierno; falta automatizar el job.
-- Incidente de seguridad: revocar dispositivos, rotar `QR_HMAC_SECRET` (nuevo secreto + redeploy), invalidar sesiones, revisar `security_events`/`audit_log`, notificar según Ley 1581.
+- `backup_runs` y `data_retention_policies` existen para gobierno; la purga operativa ya está automatizada con `pg_cron`, pero la retención legal de consumos/auditoría sigue pendiente de revisión jurídica.
+- Incidente de seguridad: revocar dispositivos, rotar `QR_HMAC_SECRET` (nuevo secreto + redeploy), invalidar sesiones con “Cerrar otras sesiones” o desde Supabase Auth, revisar `security_events`/`audit_log`, notificar según Ley 1581.
 
 ## 13. Endurecimiento pendiente antes de producción
 
 | Tema | Estado | Acción |
 | --- | --- | --- |
-| MFA obligatorio admin/supervisor | UI lista, sin enrolar | Enrolar TOTP y bloquear login sin MFA para roles privilegiados |
-| Leaked password protection | Desactivado | Activar en Supabase Auth |
+| MFA obligatorio para roles privilegiados | **Implementado** con `require_mfa`, `/login/mfa` y RLS `mfa_ok()`; demo en `false` | Enrolar TOTP a las cuentas reales y activar el flag |
+| Leaked password protection | Desactivado | Activar en Supabase Auth (dashboard o token de Management API) |
 | Pentest externo | Pendiente | Contratar antes de go-live |
-| SAST/DAST | CI con lint/build/tests | Añadir CodeQL, Semgrep y OWASP ZAP |
-| Índices FK | 49 avisos de rendimiento | Crear índices en FKs críticas (`redemptions`, `tickets`, `security_events`) |
-| `auth_rls_initplan` | 17 avisos | Usar `(select auth.uid())` en políticas de alto volumen |
+| SAST/DAST | **CodeQL, ZAP baseline semanal, Dependabot y `npm audit` en CI** | Revisar reportes y ampliar cobertura |
+| Índices FK | **49 índices creados** (`014_fk_indexes`) | Mantener advisors sin avisos `unindexed_foreign_keys` |
+| `auth_rls_initplan` | **17 políticas corregidas** (`015_rls_initplan`) | Mantener `(select auth.uid())` en políticas nuevas |
+| Credenciales PIN | **Aisladas** en `employee_credentials` / `profile_credentials` | Rotar PINs periódicamente y al retirar personal |
+| Fotos de empleados | **Bucket privado + URLs firmadas + carpeta UUID** | Verificar políticas tras cada cambio de Storage |
+| Retención operativa | **Job diario `purge-operational-data`** | Ajustar plazos con jurídica; `audit_log` no se purga |
 | Rate limit distribuido | Tabla `rate_limits` | Migrar a Redis/Upstash si crece el volumen |
 | WebAuthn completo | Modelo y UI parcial | Integrar SimpleWebAuthn con desafío servidor |
 | Correo programado | Configuración persistida | Configurar proveedor SMTP/API + `pg_cron` |
 | Backups/PITR | No en plan actual | Subir de plan y probar restauración |
-| Columnas sensibles | `employees.pin_hash` legible por roles con SELECT | Mover a tabla separada o privilegios por columna |
-| Sesiones | Registro básico | Añadir expiración, listado y revocación desde UI |
+| Sesiones | Revocación de otras sesiones desde UI | Valorar listado por dispositivo y expiración explícita |
+
+Notas de los advisors de Supabase tras el endurecimiento:
+
+- Seguridad: 5 INFO esperados por tablas sin políticas (`app_secrets`, `employee_credentials`, `profile_credentials`, `qr_nonces`, `rate_limits`) y 20 WARN esperados por funciones `SECURITY DEFINER` ejecutables por `authenticated` (helpers de RLS). Revisar cualquier aviso nuevo.
+- Rendimiento: sin `unindexed_foreign_keys` ni `auth_rls_initplan`. Quedan INFO de índices sin uso (esperable en un piloto) y WARN de múltiples políticas permisivas.
 
 ## 14. Checklist de revisión
 
@@ -208,8 +219,13 @@ La cámara solo se usa para escanear QR; no se sube video ni imagen a Supabase.
 - [x] Dispositivos con hash y revocación.
 - [x] Auditoría append-only.
 - [x] Aviso de privacidad y consentimientos.
-- [x] Cabeceras CSP/HSTS.
-- [ ] MFA obligatorio y enrolado.
-- [ ] Pentest y DAST.
+- [x] Cabeceras CSP/HSTS sin `unsafe-eval` en producción.
+- [x] MFA obligatorio configurable y reto AAL2 para roles privilegiados.
+- [x] PINs aislados en tablas de credenciales sin acceso de cliente.
+- [x] Fotos en bucket privado con URLs firmadas.
+- [x] Retención operativa automatizada con `pg_cron`.
+- [x] SAST (CodeQL), DAST semanal (ZAP), Dependabot y auditoría de dependencias en CI.
+- [ ] Leaked password protection activo.
+- [ ] Pentest externo.
 - [ ] PITR y prueba de restauración.
 - [ ] Revisión legal de retención y contratos de encargados.

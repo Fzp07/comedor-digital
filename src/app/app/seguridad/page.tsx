@@ -175,6 +175,7 @@ function SecurityContent() {
   const [mfaCode, setMfaCode] = useState("");
   const [mfaBusy, setMfaBusy] = useState(false);
   const [mfaError, setMfaError] = useState<string | null>(null);
+  const [signingOutOthers, setSigningOutOthers] = useState(false);
 
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
@@ -492,6 +493,21 @@ function SecurityContent() {
     setMfaCode("");
     toast({ title: "MFA activado", description: "Tu cuenta ahora exige un segundo factor para iniciar sesión.", variant: "success" });
     await Promise.all([loadMfa(), refreshProfile(), load(true)]);
+  }
+
+  async function closeOtherSessions() {
+    setSigningOutOthers(true);
+    const { error: signOutError } = await supabase.auth.signOut({ scope: "others" });
+    setSigningOutOthers(false);
+    if (signOutError) {
+      toast({ title: "No pudimos cerrar las otras sesiones", description: signOutError.message, variant: "error" });
+      return;
+    }
+    toast({
+      title: "Otras sesiones cerradas",
+      description: "Solo esta sesión permanece activa. Si ves actividad extraña, cambia tu contraseña.",
+      variant: "success",
+    });
   }
 
   async function removeFactor(factor: Factor) {
@@ -1029,6 +1045,16 @@ function SecurityContent() {
                   Las sesiones expiran y se renuevan automáticamente. Para producción: MFA obligatorio, rotación de secretos,
                   backups con PITR y pentest externo antes del lanzamiento.
                 </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 w-full"
+                  onClick={() => void closeOtherSessions()}
+                  loading={signingOutOthers}
+                  icon={<Power className="size-3.5" />}
+                >
+                  Cerrar otras sesiones
+                </Button>
               </CardContent>
             </Card>
           </div>

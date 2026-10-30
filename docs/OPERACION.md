@@ -29,9 +29,10 @@ Guía para administrar el piloto y para desplegar/operar la aplicación en produ
 Buenas prácticas:
 
 - Una cuenta nominal por persona; nunca compartir credenciales.
-- MFA obligatorio para `admin` y `supervisor` antes de producción.
+- MFA obligatorio para `admin`, `rrhh`, `supervisor` y `auditor` antes de producción. Se activa con **Configuración → Políticas → Exigir segundo factor** y se enrola desde `/login/mfa` o **Seguridad → MFA**.
 - Revisar mensualmente quién tiene rol privilegiado y desactivar cuentas que ya no operan.
 - El PIN de supervisor se entrega en persona y se rota ante cualquier sospecha.
+- Si se sospecha de una sesión abierta en otro equipo, usar **Seguridad → Sesiones y acceso → Cerrar otras sesiones**.
 
 ## 3. Operación diaria
 
@@ -70,7 +71,7 @@ Buenas prácticas:
 - Sede y centro de costo.
 - Estado (`activo`, `inactivo`, `retirado`, `suspendido`).
 - Plan de alimentación (se asigna en **Planes** o desde el detalle).
-- Foto opcional (JPG/PNG/WebP, máximo 5 MB).
+- Foto opcional (JPG/PNG/WebP, máximo 5 MB). Se guarda en el bucket **privado** `employee-photos`, bajo la carpeta del UUID del empleado; la PWA la muestra con URLs firmadas de 1 hora.
 - Consentimiento de tratamiento de datos; biometría solo si el empleado acepta.
 
 ### 4.2 Importación CSV
@@ -185,7 +186,8 @@ Si un consumo fue erróneo:
 - Excepciones: máximo por día.
 - Reportes: destinatarios, frecuencia, hora, activar/desactivar.
 - Sedes, ventanas de servicio, centros de costo, menús.
-- Políticas: exigir dispositivo.
+- Políticas: exigir dispositivo registrado y exigir segundo factor (MFA) para roles privilegiados.
+- El cambio de `require_mfa` aplica en el siguiente inicio de sesión o recarga de la PWA; las sesiones AAL1 existentes se redirigen a `/login/mfa`.
 
 Los cambios quedan en `audit_log` cuando la tabla lo amerita.
 
@@ -226,7 +228,8 @@ GET /offline          → 200
 
 ### 9.2 Supabase
 
-- Migraciones aplicadas: `001_core_schema` … `011_harden_trigger_functions`.
+- Migraciones del esquema base: `001_core_schema` … `012_demo_reset`.
+- Endurecimiento versionado en `supabase/migrations/`: `013_isolate_credentials_private_photos`, `014_fk_indexes`, `015_rls_initplan`, `016_retention_cron`, `017_privileges_mfa_flag`, `018_mfa_rls_enforcement`, `019_mfa_settings_profiles_policies`.
 - Edge Functions: `qr-token`, `validate-qr`, `validate-pin`, `validate-override`, `sync-offline`.
 - Todas con `verify_jwt: true`.
 - Variables de función: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (las inyecta Supabase).
@@ -251,6 +254,40 @@ supabase functions deploy sync-offline
 4. Verificar emisión y validación.
 5. Registrar el cambio en la bitácora y revisar eventos.
 
+### 9.4 Retención automática
+
+El job `purge-operational-data` se ejecuta a diario a las **08:15 UTC (03:15 Bogotá)** y llama a `public.purge_operational_data()`:
+
+| Tabla | Se elimina |
+| --- | --- |
+| `qr_nonces` | Nonces vencidos hace más de 7 días |
+| `rate_limits` | Ventanas de más de 1 día |
+| `sync_batches` | Lotes de más de 90 días |
+| `sessions` | Inactivas > 90 días o revocadas > 30 días |
+
+`audit_log` **no** se purga: es append-only. Para verificar el job:
+
+```sql
+select jobid, jobname, schedule, active from cron.job;
+select jobid, status, start_time, end_time, return_message
+from cron.job_run_details
+order by start_time desc
+limit 10;
+```
+
+Para ejecutarlo manualmente (service role o SQL editor):
+
+```sql
+select public.purge_operational_data();
+```
+
+### 9.5 Fotos privadas
+
+- El bucket `employee-photos` no es público.
+- La subida se hace a `${employeeId}/${uuid}.${ext}`; la política exige que la primera carpeta sea el UUID del empleado y que el usuario tenga `can_manage_people()`.
+- La lectura permite al propio empleado, a RR.HH./admin/auditor y a quien pueda leer la sede del empleado.
+- La PWA pide una URL firmada de 1 hora; si una foto no carga, revisar la política de Storage y que la ruta guardada sea relativa (no una URL pública antigua).
+
 ## 10. Monitoreo y alertas
 
 Revisar a diario:
@@ -259,7 +296,9 @@ Revisar a diario:
 - **Seguridad:** eventos `critical`/`warning` sin resolver, dispositivos no autorizados, rate limits.
 - **Reportes:** conciliación de cocina y excepciones.
 - **Netlify:** estado del deploy y logs de funciones.
-- **Supabase:** salud del proyecto, uso de base de datos, errores de Edge Functions.
+- **Supabase:** salud del proyecto, uso de base de datos, errores de Edge Functions y resultado de `cron.job_run_details`.
+- **GitHub Actions:** CI, CodeQL y ZAP baseline semanal.
+- **Dependabot:** revisar y fusionar actualizaciones de dependencias con CI verde.
 
 Alertas recomendadas:
 
@@ -268,6 +307,8 @@ Alertas recomendadas:
 - Dispositivo revocado intentando validar.
 - Caída del frontend (uptime check).
 - Backups fallidos.
+- Job `purge-operational-data` fallido o sin ejecuciones en 48 horas.
+- Nuevos avisos `critical`/`warning` en los advisors de Supabase.
 
 ## 11. Respaldos y restauración
 
@@ -326,15 +367,26 @@ Actualizar dependencias:
 
 ```bash
 npm outdated
-npm update
+npm update                     # o fusionar las PR de Dependabot
+npm audit --omit=dev
 npm run lint && npm test && npm run build
 ```
+
+Revisar también:
+
+- `cron.job_run_details` del job de retención.
+- Advisors de seguridad y rendimiento en Supabase.
+- Resultado del ZAP baseline semanal (artefacto en GitHub Actions).
+- Alertas de CodeQL en la pestaña **Security** del repositorio.
 
 ## 14. Solución de problemas
 
 | Síntoma | Causa probable | Acción |
 | --- | --- | --- |
 | “Sesión inválida” | Token expirado o usuario desactivado | Volver a iniciar sesión; revisar `profiles.active` |
+| Redirige a `/login/mfa` y no deja entrar | `require_mfa` activo y la cuenta no tiene TOTP verificado | Enrolar el factor en la misma pantalla o desactivar el flag temporalmente |
+| “Código inválido” en MFA | Reloj del dispositivo desincronizado o código vencido | Sincronizar hora automática y usar el código vigente |
+| La foto del empleado no carga | Bucket privado, ruta antigua o política de Storage | Verificar `photo_url` relativa, política `employee_photos_read` y URL firmada |
 | “Tu rol no está autorizado para validar” | Rol distinto de admin/operador/supervisor | Asignar rol correcto o usar cuenta autorizada |
 | “El empleado pertenece a otra sede” | Operador/caja de otra sede | Validar en la sede correcta o usar admin |
 | “El dispositivo no está autorizado o fue revocado” | Token ausente/incorrecto o caja revocada | Configurar token vigente en la caja |

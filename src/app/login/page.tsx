@@ -22,6 +22,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { Logo } from "@/components/logo";
 import { Alert, Button, Input, Label, Spinner } from "@/components/ui";
+import { mfaChallengeRequired } from "@/lib/mfa";
 import { roleHome } from "@/lib/utils";
 
 const demoAccounts = [
@@ -37,7 +38,7 @@ const DEMO_PASSWORD = "Demo2026*";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, mfaRequired, assuranceLevel, securityLoading } = useAuth();
   const [email, setEmail] = useState("admin@comedordigital.co");
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [showPassword, setShowPassword] = useState(false);
@@ -47,10 +48,13 @@ export default function LoginPage() {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!loading && session) {
-      router.replace(roleHome(profile?.role));
+    if (loading || securityLoading || !session || !profile) return;
+    if (mfaChallengeRequired(profile, mfaRequired, assuranceLevel)) {
+      router.replace("/login/mfa");
+      return;
     }
-  }, [loading, profile?.role, router, session]);
+    router.replace(roleHome(profile.role));
+  }, [assuranceLevel, loading, mfaRequired, profile, router, securityLoading, session]);
 
   async function signIn(nextEmail: string, nextPassword: string) {
     setError(null);
@@ -74,8 +78,7 @@ export default function LoginPage() {
     event.preventDefault();
     setSubmitting(true);
     const ok = await signIn(email, password);
-    if (ok) router.replace("/app/dashboard");
-    setSubmitting(false);
+    if (!ok) setSubmitting(false);
   }
 
   async function handleDemo(nextEmail: string) {
@@ -83,15 +86,7 @@ export default function LoginPage() {
     setEmail(nextEmail);
     setPassword(DEMO_PASSWORD);
     const ok = await signIn(nextEmail, DEMO_PASSWORD);
-    if (ok) {
-      const target = nextEmail.startsWith("empleado")
-        ? "/app/mi-qr"
-        : nextEmail.startsWith("operador")
-          ? "/app/operador"
-          : "/app/dashboard";
-      router.replace(target);
-    }
-    setDemoLoading(null);
+    if (!ok) setDemoLoading(null);
   }
 
   async function handleReset() {

@@ -3,6 +3,7 @@
 import {
   forwardRef,
   useEffect,
+  useState,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -12,6 +13,7 @@ import {
 import { createPortal } from "react-dom";
 import { cva, type VariantProps } from "class-variance-authority";
 import { Check, Loader2, Search, X } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
 import type { EmployeeStatus, RedemptionStatus, TicketStatus } from "@/lib/types";
 
@@ -363,10 +365,32 @@ export function Avatar({
   className?: string;
 }) {
   const sizes = { xs: "size-7 text-[10px]", sm: "size-9 text-xs", md: "size-11 text-sm", lg: "size-14 text-base", xl: "size-20 text-xl" };
+  const value = src?.trim() || null;
+  const directUrl = value && /^(https?:|data:|blob:)/i.test(value) ? value : null;
+  const [signedPhoto, setSignedPhoto] = useState<{ source: string; url: string } | null>(null);
+  const displayUrl = directUrl ?? (signedPhoto?.source === value ? signedPhoto.url : null);
+
+  useEffect(() => {
+    if (!value || directUrl) return;
+    let cancelled = false;
+    void supabase.storage
+      .from("employee-photos")
+      .createSignedUrl(value, 60 * 60)
+      .then(({ data }) => {
+        if (!cancelled && data?.signedUrl) {
+          setSignedPhoto({ source: value, url: data.signedUrl });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [directUrl, value]);
+
   return (
     <span className={cn("relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-100 font-bold text-brand-800 ring-1 ring-brand-200", sizes[size], className)}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- fotos de empleados en Storage o data URLs */}
-      {src ? <img src={src} alt={name ?? "Foto"} className="size-full object-cover" /> : initials(name)}
+      {/* eslint-disable-next-line @next/next/no-img-element -- fotos privadas de Storage resueltas con URL firmada */}
+      {displayUrl ? <img src={displayUrl} alt={name ?? "Foto"} className="size-full object-cover" /> : initials(name)}
     </span>
   );
 }

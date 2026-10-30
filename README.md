@@ -2,7 +2,7 @@
 
 PWA móvil-first para administrar el comedor de **una sola empresa**: empleados, planes y cupos, tiquetes digitales, validación de QR/PIN, historial, reportes y auditoría. Construida con Next.js App Router, Supabase y Netlify.
 
-> **Estado:** MVP funcional desplegado en producción con datos demo. Single-tenant: una empresa, una o varias sedes.
+> **Estado:** MVP funcional desplegado en producción con datos demo. Endurecimiento aplicado (credenciales aisladas, fotos privadas, MFA configurable, retención y CI de seguridad). Single-tenant: una empresa, una o varias sedes.
 
 ## URLs
 
@@ -55,14 +55,18 @@ Todas usan la contraseña **`Demo2026*`**.
 - Centro de seguridad: eventos, auditoría append-only, dispositivos autorizados y MFA TOTP.
 
 ### Seguridad y privacidad
-- RLS deny-by-default en todas las tablas expuestas; roles con mínimo privilegio.
+- RLS deny-by-default en las 35 tablas de `public`; roles con mínimo privilegio.
 - Funciones sensibles `SECURITY DEFINER` restringidas al service role.
+- PINs aislados en `employee_credentials` / `profile_credentials`, sin políticas RLS ni acceso de `anon`/`authenticated`.
 - Service role solo dentro de Edge Functions; nunca en el navegador.
 - Dispositivos con token opaco, hash SHA-256 en servidor y revocación inmediata.
-- MFA TOTP para cuentas privilegiadas (UI y flag `mfa_enrolled`).
+- MFA TOTP con política `require_mfa` para `admin`, `rrhh`, `supervisor` y `auditor`; reto AAL2 en `/login/mfa` y segunda capa en RLS (`mfa_ok()`).
+- Fotos de empleados en bucket privado, con rutas por UUID y URLs firmadas.
 - Consentimiento informado, minimización de datos y aviso de privacidad alineado con Ley 1581 de Colombia.
-- Cabeceras CSP, HSTS, `X-Frame-Options`, `nosniff` y `Referrer-Policy`.
+- Cabeceras CSP (sin `unsafe-eval` en producción), HSTS, `X-Frame-Options`, `nosniff` y `Referrer-Policy`.
 - Auditoría inmutable de cambios y eventos de seguridad.
+- Retención operativa automática con `pg_cron`; `audit_log` no se purga.
+- CI con lint/tests/build, `npm audit`, CodeQL, ZAP baseline semanal y Dependabot.
 
 ## Stack
 
@@ -70,8 +74,8 @@ Todas usan la contraseña **`Demo2026*`**.
 - **Backend:** Supabase Postgres, Auth, Edge Functions (Deno), RLS, Storage, Realtime, Vault.
 - **Offline:** Dexie + IndexedDB + Web Crypto.
 - **QR:** `qrcode` en cliente; firma y validación en Edge Functions.
-- **Calidad:** ESLint, Vitest, `tsc` dentro de `next build`.
-- **Infraestructura:** Netlify (frontend), GitHub Actions (CI), Supabase (datos y funciones).
+- **Calidad y seguridad:** ESLint, Vitest, `tsc` dentro de `next build`, `npm audit`, CodeQL, ZAP baseline y Dependabot.
+- **Infraestructura:** Netlify (frontend), GitHub Actions (CI/seguridad), Supabase (datos y funciones).
 
 ## Arquitectura
 
@@ -103,6 +107,7 @@ Flujo QR:
 src/
   app/
     login/                 Inicio de sesión y cuentas demo
+    login/mfa/             Reto TOTP e inscripción del segundo factor
     app/                   Área autenticada
       dashboard/           Panel general
       empleados/           Gestión e importación
@@ -120,6 +125,8 @@ src/
   lib/                     Supabase, tipos, utils, CSV, Dexie, cripto
   providers/               Auth y toasts
 supabase/functions/        Edge Functions Deno
+supabase/migrations/       Migraciones 013–017 del endurecimiento
+.github/workflows/         CI, CodeQL y ZAP baseline
 docs/                      Arquitectura, seguridad, operación y demo
 ```
 
@@ -163,8 +170,15 @@ Migraciones aplicadas en el proyecto `urkwubgdifcesfozdbbe`:
 10. `010_lock_service_functions` — revoca `EXECUTE` de funciones sensibles a `anon`/`authenticated`; solo `service_role`.
 11. `011_harden_trigger_functions` — `search_path` fijo y sin RPC para funciones de trigger.
 12. `012_demo_reset` — reinicio de consumos demo para la presentación (solo datos del piloto).
+13. `013_isolate_credentials_private_photos` — PINs a tablas aisladas y bucket de fotos privado.
+14. `014_fk_indexes` — 49 índices para claves foráneas.
+15. `015_rls_initplan` — 17 políticas con `(select auth.uid())`.
+16. `016_retention_cron` — job diario `purge-operational-data`.
+17. `017_privileges_mfa_flag` — mínimo privilegio, `require_mfa` y `actor_role` en auditoría.
+18. `018_mfa_rls_enforcement` — `mfa_ok()` y AAL2 obligatorio en políticas sensibles.
+19. `019_mfa_settings_profiles_policies` — cierra el bypass de `company_settings` y `profiles`.
 
-El esquema productivo es la fuente de verdad y está registrado en `supabase_migrations.schema_migrations`. Para replicar en un entorno nuevo, usa `supabase db pull`/`db push` con las credenciales del proyecto o vuelve a aplicar las migraciones desde el historial de Supabase.
+Las migraciones `013`–`019` están versionadas en `supabase/migrations/`. El esquema base vive en el historial de Supabase (`supabase_migrations.schema_migrations`); para replicar en un entorno nuevo, parte del esquema base y aplica las migraciones pendientes con `supabase db push` o el SQL editor.
 
 Objetos relevantes:
 
@@ -204,7 +218,15 @@ Todas usan `verify_jwt: true`, crean su propio cliente con service role y devuel
 npm run lint    # 0 errores; advertencias intencionales de carga de datos en efectos
 npm test        # Vitest: CSV, utilidades, fechas y roles
 npm run build   # TypeScript + build de producción
+npm audit --omit=dev
 ```
+
+GitHub Actions:
+
+- **CI** (`ci.yml`): `npm ci`, `npm audit --omit=dev --audit-level=high`, lint, tests y build.
+- **CodeQL** (`codeql.yml`): análisis `security-extended` de JavaScript/TypeScript en push, PR y semanal.
+- **ZAP baseline** (`zap-baseline.yml`): escaneo pasivo semanal contra producción y artefacto con el reporte.
+- **Dependabot** (`dependabot.yml`): PR semanales agrupadas para npm y GitHub Actions.
 
 Pruebas de extremo a extremo ejecutadas contra Supabase:
 
@@ -223,18 +245,22 @@ Resumen; el detalle está en [docs/SEGURIDAD.md](docs/SEGURIDAD.md).
 
 - RLS activo y deny-by-default; roles `admin`, `rrhh`, `operador`, `supervisor`, `auditor`, `empleado`.
 - Funciones sensibles (`get_signing_secret`, `verify_*_pin`, `redeem_ticket`, nonces y rate limit) solo service role; el navegador nunca ve la service role key ni puede invocarlas por RPC.
+- PINs en tablas de credenciales sin políticas RLS; `employees` y `profiles` ya no exponen hashes.
 - QR firmado, TTL corto, nonce de un solo uso y auditoría de duplicados.
 - Dispositivos autorizados con token opaco y hash en servidor.
-- MFA TOTP disponible para todas las cuentas; obligatorio para admin/supervisor antes de producción.
+- MFA TOTP con política `require_mfa`; demo apagada para no bloquear las cuentas sin factor.
+- Fotos privadas con URLs firmadas; CSP sin `unsafe-eval` en producción.
 - Datos personales minimizados; consentimiento y aviso de privacidad (Ley 1581 de 2012).
-- Backups/PITR, rotación de secretos y pentest externo son requisitos de producción.
+- Backups/PITR, leaked password protection, rotación de secretos y pentest externo siguen siendo requisitos de producción.
 
 ## Limitaciones conocidas
 
-- **MFA:** la UI está implementada, pero ningún usuario demo tiene un factor TOTP enrolado todavía.
-- **Reporte programado:** la configuración se persiste, pero el envío automático por correo requiere configurar `pg_cron` y un proveedor SMTP/API en producción.
+- **MFA:** la imposición por política está implementada, pero ningún usuario demo tiene TOTP enrolado y `require_mfa` está en `false`.
+- **Leaked password protection:** requiere activarlo en el dashboard de Supabase o con un token de Management API.
+- **Reporte programado:** la configuración se persiste, pero el envío automático por correo requiere configurar un proveedor SMTP/API en producción.
 - **WebAuthn:** el modelo y las políticas existen; el enrolamiento biométrico completo (SimpleWebAuthn) queda como siguiente iteración. El PIN y el QR cubren el MVP.
-- **Migraciones locales:** el esquema se aplicó vía Supabase MCP; el historial está en Supabase, no como archivos SQL en el repo.
+- **Backups/PITR:** el plan actual no incluye PITR; subir de plan y probar restauración antes de producción.
+- **Pentest y revisión legal:** pendientes de contratación/asesoría externa.
 - **Render:** no se usa; el MCP devolvió `unauthorized` y el MVP no lo requiere.
 
 ## Documentación

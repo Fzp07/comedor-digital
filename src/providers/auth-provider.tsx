@@ -19,7 +19,11 @@ interface AuthContextValue {
   profile: Profile | null;
   loading: boolean;
   error: string | null;
+  mfaRequired: boolean;
+  assuranceLevel: string | null;
+  securityLoading: boolean;
   refreshProfile: () => Promise<void>;
+  refreshAssuranceLevel: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -30,6 +34,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [assuranceLevel, setAssuranceLevel] = useState<string | null>(null);
+  const [securityLoading, setSecurityLoading] = useState(true);
   const mounted = useRef(true);
   const profileRequest = useRef(0);
 
@@ -63,6 +70,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!session?.user.id) return;
     await loadProfile(session.user.id);
   }, [loadProfile, session]);
+
+  const refreshAssuranceLevel = useCallback(async () => {
+    const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (mounted.current) setAssuranceLevel(data?.currentLevel ?? null);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!session) {
+      setMfaRequired(false);
+      setAssuranceLevel(null);
+      setSecurityLoading(false);
+      return;
+    }
+
+    setSecurityLoading(true);
+    setMfaRequired(false);
+    setAssuranceLevel(null);
+    void Promise.all([
+      supabase.from("company_settings").select("require_mfa").maybeSingle(),
+      supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+    ])
+      .then(([settingsResult, aalResult]) => {
+        if (cancelled || !mounted.current) return;
+        setMfaRequired(Boolean(settingsResult.data?.require_mfa));
+        setAssuranceLevel(aalResult.data?.currentLevel ?? null);
+      })
+      .finally(() => {
+        if (!cancelled && mounted.current) setSecurityLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   useEffect(() => {
     mounted.current = true;
@@ -116,8 +158,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ session, profile, loading, error, refreshProfile, signOut }),
-    [session, profile, loading, error, refreshProfile, signOut],
+    () => ({
+      session,
+      profile,
+      loading,
+      error,
+      mfaRequired,
+      assuranceLevel,
+      securityLoading,
+      refreshProfile,
+      refreshAssuranceLevel,
+      signOut,
+    }),
+    [
+      session,
+      profile,
+      loading,
+      error,
+      mfaRequired,
+      assuranceLevel,
+      securityLoading,
+      refreshProfile,
+      refreshAssuranceLevel,
+      signOut,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

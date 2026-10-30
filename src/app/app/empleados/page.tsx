@@ -279,16 +279,16 @@ function EmployeesContent() {
     setPhotoPreview(URL.createObjectURL(file));
   }
 
-  async function uploadPhoto(employeeCode: string): Promise<string | null> {
+  async function uploadPhoto(employeeId: string): Promise<string | null> {
     if (!photoFile) return null;
-    const extension = photoFile.name.split(".").pop()?.toLowerCase() || "jpg";
-    const path = `${employeeCode.replace(/[^a-zA-Z0-9-_]/g, "")}-${crypto.randomUUID()}.${extension}`;
+    const extension = photoFile.type === "image/png" ? "png" : photoFile.type === "image/webp" ? "webp" : "jpg";
+    // El bucket es privado y la política exige que la primera carpeta sea el UUID del empleado.
+    const path = `${employeeId}/${crypto.randomUUID()}.${extension}`;
     const { error: uploadError } = await supabase.storage
       .from("employee-photos")
       .upload(path, photoFile, { contentType: photoFile.type, upsert: false });
     if (uploadError) throw new Error(`No pudimos subir la foto: ${uploadError.message}`);
-    const { data } = supabase.storage.from("employee-photos").getPublicUrl(path);
-    return data.publicUrl;
+    return path;
   }
 
   async function syncPlans(employeeId: string) {
@@ -338,8 +338,8 @@ function EmployeesContent() {
     if (!form.site_id) return setFormError("Selecciona una sede.");
 
     setSaving(true);
+    let photoWarning: string | null = null;
     try {
-      const photoUrl = await uploadPhoto(form.code);
       const payload = {
         code: form.code.trim().toUpperCase(),
         document_type: form.document_type,
@@ -354,7 +354,6 @@ function EmployeesContent() {
         hire_date: form.hire_date || null,
         notes: form.notes.trim() || null,
         consent_data: form.consent_data,
-        ...(photoUrl ? { photo_url: photoUrl } : {}),
       };
 
       let employeeId = form.id;
@@ -369,6 +368,23 @@ function EmployeesContent() {
           .single();
         if (insertError) throw new Error(insertError.message);
         employeeId = data.id as string;
+      }
+
+      // La política del bucket privado exige el UUID del empleado como carpeta:
+      // por eso la foto se sube después de crear la fila.
+      if (photoFile) {
+        try {
+          const photoPath = await uploadPhoto(employeeId);
+          if (photoPath) {
+            const { error: photoError } = await supabase
+              .from("employees")
+              .update({ photo_url: photoPath })
+              .eq("id", employeeId);
+            if (photoError) throw new Error(photoError.message);
+          }
+        } catch (uploadError) {
+          photoWarning = uploadError instanceof Error ? uploadError.message : "No pudimos subir la foto.";
+        }
       }
 
       await syncPlans(employeeId);
@@ -401,9 +417,12 @@ function EmployeesContent() {
 
       toast({
         title: form.id ? "Empleado actualizado" : "Empleado creado",
-        description: `${payload.full_name} quedó registrado en ${sites.find((site) => site.id === form.site_id)?.name ?? "la sede"}.`,
-        variant: "success",
+        description: photoWarning
+          ? `${payload.full_name} se guardó, pero la foto no: ${photoWarning}`
+          : `${payload.full_name} quedó registrado en ${sites.find((site) => site.id === form.site_id)?.name ?? "la sede"}.`,
+        variant: photoWarning ? "warning" : "success",
       });
+      setPhotoFile(null);
       setModalOpen(false);
       await load();
     } catch (saveError) {

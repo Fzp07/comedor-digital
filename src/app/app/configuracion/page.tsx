@@ -237,6 +237,7 @@ function SettingsContent() {
       offline_grace_minutes: settings.offline_grace_minutes,
       max_overrides_per_day: settings.max_overrides_per_day,
       require_device: settings.require_device,
+      require_mfa: settings.require_mfa,
     });
   }
 
@@ -791,6 +792,14 @@ function SettingsContent() {
               </div>
               <div className="rounded-xl border border-line bg-white px-3.5 py-3">
                 <Toggle checked={settings.require_device} onChange={(value) => updateSetting("require_device", value)} label="Exigir dispositivo registrado" description="Solo cajas autorizadas pueden validar consumos." />
+              </div>
+              <div className="rounded-xl border border-line bg-white px-3.5 py-3 sm:col-span-2">
+                <Toggle
+                  checked={settings.require_mfa}
+                  onChange={(value) => updateSetting("require_mfa", value)}
+                  label="Exigir segundo factor (MFA)"
+                  description="Administradores, RR.HH., supervisores y auditores deben verificar un código TOTP al iniciar sesión."
+                />
               </div>
             </CardContent>
             <div className="flex justify-end border-t border-line px-5 py-3">

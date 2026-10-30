@@ -25,6 +25,7 @@ Deja Supabase y Netlify abiertos en pestañas separadas solo si vas a mostrar in
 ### Checklist técnico
 
 - [ ] `require_device = false` para la demo básica (Configuración → Políticas).
+- [ ] `require_mfa = false` para no bloquear las cuentas demo sin TOTP.
 - [ ] La ventana de la comida elegida está abierta.
 - [ ] El empleado demo no ha consumido esa comida hoy (ver script de reinicio).
 - [ ] La cámara del portátil funciona o se usará el pegado manual del token.
@@ -54,8 +55,11 @@ begin
   end loop;
 end $$;
 
--- Política de dispositivo desactivada para la demo básica.
-update public.company_settings set require_device = false where id = true;
+-- Políticas desactivadas para la demo básica (no dejar así en producción).
+update public.company_settings
+set require_device = false,
+    require_mfa = false
+where id = true;
 ```
 
 > Si ya pasaron las 15:00, usa **merienda** en el guion y ejecuta el mismo bloque cambiando `'almuerzo'` por `'merienda'`.

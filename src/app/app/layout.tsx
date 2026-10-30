@@ -5,18 +5,34 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { AppShell, FullScreenLoader } from "@/components/app-shell";
 import { Button } from "@/components/ui";
+import { mfaChallengeRequired } from "@/lib/mfa";
 import Link from "next/link";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { session, profile, loading, error, signOut } = useAuth();
+  const {
+    session,
+    profile,
+    loading,
+    error,
+    mfaRequired,
+    assuranceLevel,
+    securityLoading,
+    signOut,
+  } = useAuth();
+  const needsMfa = mfaChallengeRequired(profile, mfaRequired, assuranceLevel);
 
   useEffect(() => {
-    if (!loading && !session) router.replace("/login");
-  }, [loading, router, session]);
+    if (!loading && !securityLoading && !session) router.replace("/login");
+  }, [loading, router, securityLoading, session]);
 
-  if (loading) return <FullScreenLoader />;
+  useEffect(() => {
+    if (!loading && !securityLoading && session && needsMfa) router.replace("/login/mfa");
+  }, [loading, needsMfa, router, securityLoading, session]);
+
+  if (loading || securityLoading) return <FullScreenLoader />;
   if (!session) return <FullScreenLoader label="Redirigiendo al inicio de sesión…" />;
+  if (needsMfa) return <FullScreenLoader label="Solicitando segundo factor…" />;
 
   if (!profile) {
     return (

@@ -22,7 +22,7 @@
 │  ├── Auth (JWT, TOTP)       │
 │  ├── Postgres + RLS         │
 │  ├── Edge Functions (Deno)  │
-│  ├── Storage (fotos)        │
+│  ├── Storage privado (fotos)│
 │  ├── Realtime               │
 │  └── Vault / app_secrets    │
 └─────────────────────────────┘
@@ -33,7 +33,7 @@ No hay servidor propio ni Render. El frontend es una PWA; las funciones privileg
 ## Modelo de datos
 
 ### Configuración y catálogos
-- `company_settings` — singleton (`id = true`): nombre, NIT, zona horaria, moneda, TTL de QR, offline, overrides, reportes.
+- `company_settings` — singleton (`id = true`): nombre, NIT, zona horaria, moneda, TTL de QR, offline, overrides, reportes y `require_mfa`.
 - `sites` — sedes/cafeterías.
 - `cost_centers` — centros de costo por sede.
 - `meal_plans` — planes (almuerzo, merienda, desayuno) con cupo y precio.
@@ -42,8 +42,10 @@ No hay servidor propio ni Render. El frontend es una PWA; las funciones privileg
 - `menus` — menús por fecha/comida/sede.
 
 ### Personas y acceso
-- `employees` — datos laborales, sede, centro de costo, estado, foto, PIN hash, consentimientos.
+- `employees` — datos laborales, sede, centro de costo, estado, foto (ruta privada de Storage) y consentimientos. **No contiene hashes de PIN.**
 - `profiles` — usuario de Auth vinculado a rol y sede; `mfa_enrolled`.
+- `employee_credentials` — hash bcrypt del PIN del empleado; RLS + `FORCE`, sin políticas, solo service role/funciones.
+- `profile_credentials` — hash bcrypt del PIN de autorización de supervisor; mismo aislamiento.
 - `permissions`, `role_permissions` — catálogo de permisos por rol.
 - `consents` — consentimientos informados (datos y biometría).
 - `biometric_credentials` — credenciales WebAuthn revocables (sin imágenes ni plantillas).
@@ -132,7 +134,7 @@ Un segundo intento con el mismo token devuelve `ticket_duplicado` y crea un even
 
 ### 3. PIN
 
-`validate-pin` verifica el PIN con `crypt()` contra `employees.pin_hash` (pgcrypto en `extensions`) y aplica las mismas reglas de plan/ventana/duplicado. Es el respaldo cuando el empleado no puede generar QR.
+`validate-pin` llama a `verify_employee_pin()` (service role), que compara con `crypt()` el hash de `employee_credentials.pin_hash` (pgcrypto en `extensions`) y aplica las mismas reglas de plan/ventana/duplicado. Es el respaldo cuando el empleado no puede generar QR. La excepción de supervisor usa `profile_credentials.override_pin_hash` por la misma vía.
 
 ### 4. Excepción de supervisor
 

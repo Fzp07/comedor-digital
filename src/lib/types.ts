@@ -40,6 +40,7 @@ export interface CompanySettings {
   report_schedule: string;
   report_hour: string;
   require_device: boolean;
+  require_mfa: boolean;
 }
 
 export interface Site {

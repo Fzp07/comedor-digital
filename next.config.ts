@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const supabaseHost = "urkwubgdifcesfozdbbe.supabase.co";
+const isProduction = process.env.NODE_ENV === "production";
+const scriptSrc = ["'self'", "'unsafe-inline'", ...(isProduction ? [] : ["'unsafe-eval'"])].join(" ");
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -18,7 +20,7 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: supabaseHost,
-        pathname: "/storage/v1/object/public/**",
+        pathname: "/storage/v1/object/**",
       },
     ],
   },
@@ -42,11 +44,14 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              `script-src ${scriptSrc}`,
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com data:",
               `img-src 'self' data: blob: https://${supabaseHost}`,
               `connect-src 'self' https://${supabaseHost} wss://${supabaseHost}`,
+              "object-src 'none'",
+              "frame-src 'none'",
+              "worker-src 'self' blob:",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
