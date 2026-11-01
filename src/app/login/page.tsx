@@ -5,45 +5,29 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
-  BarChart3,
-  CheckCircle2,
   Eye,
   EyeOff,
   Fingerprint,
-  LockKeyhole,
   QrCode,
   ScanLine,
   ShieldCheck,
   Sparkles,
   UtensilsCrossed,
-  Users,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/auth-provider";
 import { Logo } from "@/components/logo";
-import { Alert, Button, Input, Label, Spinner } from "@/components/ui";
+import { Alert, Button, Input, Label } from "@/components/ui";
 import { mfaChallengeRequired } from "@/lib/mfa";
 import { roleHome } from "@/lib/utils";
-
-const demoAccounts = [
-  { role: "Admin", email: "admin@comedordigital.co", name: "Mariana Salazar", description: "Control total, configuración y seguridad", icon: ShieldCheck },
-  { role: "RR.HH.", email: "rrhh@comedordigital.co", name: "Nicolás Rueda", description: "Empleados, planes y emisión de tiquetes", icon: Users },
-  { role: "Operador", email: "operador@comedordigital.co", name: "Pedro Cáceres", description: "Valida QR y PIN en el comedor", icon: ScanLine },
-  { role: "Supervisor", email: "supervisor@comedordigital.co", name: "Claudia Benítez", description: "Excepciones, anulaciones y reportes", icon: Fingerprint },
-  { role: "Auditor", email: "auditor@comedordigital.co", name: "Hernán Quintero", description: "Solo lectura, auditoría y exportaciones", icon: BarChart3 },
-  { role: "Empleado", email: "empleado@comedordigital.co", name: "Ana María Torres", description: "QR dinámico, tiquetes e historial", icon: QrCode },
-];
-
-const DEMO_PASSWORD = "Demo2026*";
 
 export default function LoginPage() {
   const router = useRouter();
   const { session, profile, loading, mfaRequired, assuranceLevel, securityLoading } = useAuth();
-  const [email, setEmail] = useState("admin@comedordigital.co");
-  const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [demoLoading, setDemoLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -79,14 +63,6 @@ export default function LoginPage() {
     setSubmitting(true);
     const ok = await signIn(email, password);
     if (!ok) setSubmitting(false);
-  }
-
-  async function handleDemo(nextEmail: string) {
-    setDemoLoading(nextEmail);
-    setEmail(nextEmail);
-    setPassword(DEMO_PASSWORD);
-    const ok = await signIn(nextEmail, DEMO_PASSWORD);
-    if (!ok) setDemoLoading(null);
   }
 
   async function handleReset() {
@@ -141,12 +117,6 @@ export default function LoginPage() {
               </div>
             ))}
           </div>
-        </div>
-
-        <div className="relative z-10 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-white/10 pt-5 text-[11px] text-brand-100/60">
-          <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-3.5 text-brand-300" /> RLS en todas las tablas</span>
-          <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-3.5 text-brand-300" /> MFA para administradores</span>
-          <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-3.5 text-brand-300" /> Datos cifrados en tránsito</span>
         </div>
       </section>
 
@@ -215,40 +185,6 @@ export default function LoginPage() {
               {!submitting ? <ArrowRight className="size-4" /> : null}
             </Button>
           </form>
-
-          <div className="my-7 flex items-center gap-3">
-            <div className="h-px flex-1 bg-line" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">Acceso demo por rol</span>
-            <div className="h-px flex-1 bg-line" />
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            {demoAccounts.map((account) => (
-              <button
-                key={account.email}
-                type="button"
-                onClick={() => handleDemo(account.email)}
-                disabled={Boolean(demoLoading)}
-                className="group flex items-center gap-3 rounded-xl border border-line bg-card px-3 py-2.5 text-left transition hover:border-brand-300 hover:bg-brand-50/60 disabled:opacity-60"
-              >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700 transition group-hover:bg-brand-600 group-hover:text-white">
-                  {demoLoading === account.email ? <Spinner className="size-4" /> : <account.icon className="size-4" />}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[11px] font-extrabold text-ink">{account.role}</span>
-                  <span className="block truncate text-[10px] text-muted">{account.name}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-6 flex items-start gap-2 rounded-xl border border-line bg-paper/70 px-3 py-2.5 text-[10px] leading-relaxed text-muted">
-            <LockKeyhole className="mt-0.5 size-3.5 shrink-0 text-brand-600" />
-            <span>
-              Demo: contraseña <strong className="font-bold text-ink">{DEMO_PASSWORD}</strong> para todos los roles.
-              Los datos son ficticios y se reinician con el entorno de piloto.
-            </span>
-          </div>
 
           <div className="mt-8 flex flex-wrap items-center justify-between gap-3 text-[10px] text-muted">
             <span className="inline-flex items-center gap-1.5">
